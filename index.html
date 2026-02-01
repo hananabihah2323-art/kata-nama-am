@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<title>Kepala Ke Kiri, Kepala Ke Kanan</title>
+<style>
+body {
+  font-family: Arial, sans-serif;
+  text-align: center;
+  background-color: #f2f2f2;
+}
+.card {
+  background: white;
+  padding: 30px;
+  margin: 50px auto;
+  width: 80%;
+  max-width: 400px;
+  border-radius: 15px;
+}
+button {
+  font-size: 20px;
+  padding: 15px 25px;
+  margin: 10px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+}
+.left { background: #ff9999; }
+.right { background: #99ff99; }
+</style>
+</head>
+
+<body>
+
+<h1>🧠 Kepala Ke Kiri, Kepala Ke Kanan</h1>
+
+<div class="card">
+  <p id="soalan">Perkataan “sekolah” ialah kata nama am.</p>
+</div>
+
+<button class="left" onclick="jawab(false)">⬅️ Kepala Ke Kiri</button>
+<button class="right" onclick="jawab(true)">➡️ Kepala Ke Kanan</button>
+
+<p id="keputusan"></p>
+
+<script>
+function jawab(pilihan) {
+  if (pilihan === true) {
+    document.getElementById("keputusan").innerHTML =
+      "✅ Betul! Tahniah!";
+  } else {
+    document.getElementById("keputusan").innerHTML =
+      "❌ Salah. Cuba lagi!";
+  }
+}
+</script>
+
+</body>
+</html>
