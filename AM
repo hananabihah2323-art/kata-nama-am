@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KaNam Toleh - Belajar Kata Nama Am</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+
+    <style>
+        :root {
+            --primary: #4CAF50;
+            --secondary: #FFC107;
+            --danger: #f44336;
+            --bg: #e3f2fd;
+        }
+
+        body {
+            font-family: 'Comic Sans MS', 'Chalkboard SE', cursive, sans-serif;
+            background-color: var(--bg);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow: hidden;
+            color: #333;
+        }
+
+        #game-container {
+            width: 100%;
+            max-width: 800px;
+            text-align: center;
+            padding: 20px;
+        }
+
+        /* Video / Camera Styles */
+        #video-wrapper {
+            position: relative;
+            width: 320px;
+            height: 240px;
+            margin: 10px auto;
+            border: 5px solid white;
+            border-radius: 15px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            background: #000;
+        }
+
+        video { transform: scaleX(-1); border-radius: 10px; width: 100%; height: 100%; }
+
+        /* UI Elements */
+        .stats { display: flex; justify-content: space-around; width: 100%; font-size: 1.5rem; font-weight: bold; margin-bottom: 10px; }
+        
+        #instruction { background: var(--secondary); padding: 10px; border-radius: 50px; margin: 10px 0; font-size: 1.2rem; box-shadow: 2px 2px 0px #b08907; }
+
+        #word-card {
+            font-size: 4rem;
+            padding: 40px;
+            background: white;
+            border-radius: 20px;
+            margin: 20px 0;
+            box-shadow: 0 10px 0px #ccc;
+            min-height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s;
+        }
+
+        /* Direction Hints */
+        .controls-hint {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            margin-top: 20px;
+        }
+        .hint-box { padding: 15px; border-radius: 10px; width: 40%; font-weight: bold; }
+        .left-hint { background: #bbdefb; border-left: 10px solid #2196f3; text-align: left; }
+        .right-hint { background: #ffecb3; border-right: 10px solid #ffa000; text-align: right; }
+
+        /* Feedback Overlays */
+        #feedback {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 5rem;
+            display: none;
+            z-index: 100;
+            text-shadow: 2px 2px 10px rgba(0,0,0,0.2);
+        }
+
+        .mascot { font-size: 3rem; margin-bottom: -10px; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div class="mascot">🐱‍👤 <b>KaNam Toleh</b></div>
+    
+    <div class="stats">
+        <span>Level: <span id="lvl-display">1</span></span>
+        <span>Skor: <span id="score-display">0</span></span>
+        <span>Masa: <span id="timer-display">30</span>s</span>
+    </div>
+
+    <div id="instruction">👉 Pilih Kata Nama Am Hidup</div>
+
+    <div id="video-wrapper">
+        <video id="webcam" autoplay playsinline></video>
+    </div>
+
+    <div id="word-card">SEDIA?</div>
+
+    <div class="controls-hint">
+        <div class="hint-box left-hint">⬅️ TOLEH KIRI<br><small>YA / KATA NAMA AM</small></div>
+        <div class="hint-box right-hint">TOLEH KANAN ➡️<br><small>BUKAN / SALAH</small></div>
+    </div>
+</div>
+
+<div id="feedback">✅</div>
+
+<script>
+/** GAME DATA **/
+const levels = [
+    { 
+        id: 1, 
+        goal: "Pilih Kata Nama Am Hidup", 
+        words: [
+            {w: "guru", c: true}, {w: "kucing", c: true}, {w: "doktor", c: true},
+            {w: "meja", c: false}, {w: "buku", c: false}, {w: "pensel", c: false}
+        ]
+    },
+    { 
+        id: 2, 
+        goal: "Pilih Kata Nama Am", 
+        words: [
+            {w: "sekolah", c: true}, {w: "sungai", c: true}, {w: "cikgu", c: true},
+            {w: "berlari", c: false}, {w: "cantik", c: false}, {w: "Ali", c: false}
+        ]
+    },
+    { 
+        id: 3, 
+        goal: "Pilih Kata Nama Am (Bukan Khas)", 
+        words: [
+            {w: "bandar", c: true}, {w: "kereta", c: true}, {w: "murid", c: true},
+            {w: "Proton Saga", c: false}, {w: "Sungai Pahang", c: false}, {w: "SK Seri Murni", c: false}
+        ]
+    }
+];
+
+let currentLevel = 0;
+let score = 0;
+let timeLeft = 30;
+let currentWordIndex = 0;
+let canAnswer = true;
+let timerInterval;
+
+/** AUDIO SYNTHESIS **/
+function speak(text) {
+    const msg = new SpeechSynthesisUtterance();
+    msg.text = text;
+    msg.lang = 'ms-MY';
+    window.speechSynthesis.speak(msg);
+}
+
+/** GAME LOGIC **/
+function startGame() {
+    nextWord();
+    timerInterval = setInterval(() => {
+        timeLeft--;
+        document.getElementById('timer-display').innerText = timeLeft;
+        if(timeLeft <= 0) endGame();
+    }, 1000);
+}
+
+function nextWord() {
+    const levelData = levels[currentLevel];
+    document.getElementById('instruction').innerText = "👉 " + levelData.goal;
+    document.getElementById('lvl-display').innerText = levelData.id;
+    
+    let pool = levelData.words;
+    currentWordIndex = Math.floor(Math.random() * pool.length);
+    let wordObj = pool[currentWordIndex];
+    
+    const card = document.getElementById('word-card');
+    card.innerText = wordObj.w;
+    card.style.transform = "scale(1)";
+    speak(wordObj.w);
+    canAnswer = true;
+}
+
+function checkAnswer(isLeft) {
+    if(!canAnswer) return;
+    canAnswer = false;
+    
+    const correct = levels[currentLevel].words[currentWordIndex].c;
+    const isCorrect = (isLeft === correct);
+    
+    const fb = document.getElementById('feedback');
+    fb.style.display = 'block';
+    
+    if(isCorrect) {
+        fb.innerText = "✅ Betul!";
+        score += 10;
+        document.getElementById('score-display').innerText = score;
+    } else {
+        fb.innerText = "❌ Cuba Lagi!";
+    }
+
+    // Level progression
+    if (score > 0 && score % 50 === 0 && currentLevel < 2) {
+        currentLevel++;
+        timeLeft += 10; // Bonus time
+    }
+
+    setTimeout(() => {
+        fb.style.display = 'none';
+        nextWord();
+    }, 1500);
+}
+
+function endGame() {
+    clearInterval(timerInterval);
+    alert("Permainan Tamat! Skor Akhir: " + score);
+    location.reload();
+}
+
+/** INPUT CONTROLS **/
+// Keyboard Fallback
+window.addEventListener('keydown', (e) => {
+    if(e.key === "ArrowLeft") checkAnswer(true);
+    if(e.key === "ArrowRight") checkAnswer(false);
+});
+
+/** WEBCAM & HEAD TILT (FaceMesh) **/
+const videoElement = document.getElementById('webcam');
+
+async function setupCamera() {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    videoElement.srcObject = stream;
+    return new Promise((resolve) => {
+        videoElement.onloadedmetadata = () => resolve(videoElement);
+    });
+}
+
+const faceMesh = new FaceMesh({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+});
+
+faceMesh.setOptions({
+    maxNumFaces: 1,
+    refineLandmarks: true,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5
+});
+
+faceMesh.onResults((results) => {
+    if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+        const landmarks = results.multiFaceLandmarks[0];
+        // Calculate tilt using nose bridge vs cheeks
+        const nose = landmarks[1];
+        const leftCheek = landmarks[234];
+        const rightCheek = landmarks[454];
+
+        // Mirror check: nose closer to rightCheek in mirror means tilting Left
+        const tilt = nose.x - (leftCheek.x + rightCheek.x) / 2;
+
+        if (tilt > 0.05) checkAnswer(true);  // Tilt Left
+        if (tilt < -0.05) checkAnswer(false); // Tilt Right
+    }
+});
+
+setupCamera().then(() => {
+    const timer = setInterval(async () => {
+        await faceMesh.send({image: videoElement});
+    }, 100);
+    startGame();
+});
+</script>
+
+</body>
+</html>
